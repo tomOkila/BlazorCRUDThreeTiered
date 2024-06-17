@@ -1,0 +1,188 @@
+﻿@page "/"
+@using BlazorCRUDThreeTiered.Business.Entities
+
+<PageTitle>Employee</PageTitle>
+<RadzenButton Text="Create" id="CreateEmployee" Click="CreateClicked" Icon="add" ButtonStyle="Radzen.ButtonStyle.Primary" Size="Radzen.ButtonSize.Medium" Style="margin:10px;margin-left:0px;" />
+<RadzenDataGrid AllowFiltering="true" AllowColumnResize="false"
+                AllowAlternatingRows="false"
+                AllowSorting="true"
+                AllowMultiColumnSorting="true"
+                PageSize="5"
+                AllowPaging="true"
+                ShowPagingSummary="true"
+                FilterCaseSensitivity="Radzen.FilterCaseSensitivity.CaseInsensitive"
+                Data="@employees"
+                EmptyText="No employee records at the moment"
+                TItem="Employee">
+    <Columns>
+        <RadzenDataGridColumn TItem="Employee" Property="Id" Title="ID" Frozen="true" Width="160px" />
+        <RadzenDataGridColumn TItem="Employee" Property="Name" Title="Name" Width="160px" />
+        <RadzenDataGridColumn TItem="Employee" Property="EmailAddress" Title="EmailAddress" Width="200px" />
+        <RadzenDataGridColumn Context="Employee" Filterable="false"
+                              Sortable="false"
+                              Width="60px"
+                              TextAlign="Radzen.TextAlign.Center"
+                              Frozen="true"
+                              FrozenPosition="Radzen.FrozenColumnPosition.Right"
+                              Title="Actions">
+            <Template Context="employees">
+                <RadzenButton Icon="edit" ButtonStyle="Radzen.ButtonStyle.Primary" Variant="Radzen.Variant.Flat" Size="Radzen.ButtonSize.Medium" Click="@(args =>EditClicked(employees))">
+                </RadzenButton>
+                <RadzenButton Icon="delete" ButtonStyle="Radzen.ButtonStyle.Danger" Variant="Radzen.Variant.Flat" Size="Radzen.ButtonSize.Medium" Click="@(args => DeleteClicked(employees))">
+                </RadzenButton>
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</RadzenDataGrid>
+
+@code{
+      Employee employee = new();
+       Department department = new();
+       List<Employee> employees = new();
+      List<Department> departments = new();
+
+    private async Task GetData() => employees = await emp.GetAsync();
+    private async Task GetDept()=> departments = await dept.GetAsync();
+
+
+    protected async override Task OnInitializedAsync()
+    {
+        await GetData();
+        await GetDept();
+    }
+
+    async Task Save()
+    {
+        try
+        {
+            if(string.IsNullOrEmpty(employee.Name) && string.IsNullOrEmpty(employee.EmailAddress))
+            {
+                toastService.ShowError("Please supply all employee details before proceeding.");
+                return;
+            }
+
+            if (employee.DepartmentId==0)
+            {
+                toastService.ShowError("Department name has to be supplied. Please retry");
+                return;
+            }
+
+         
+            var response = new ServiceResponse(false, null!);
+            if (employee.Id > 0)
+                response = await emp.UpdateAsync(employee);
+            else
+                response = await emp.AddAsync(employee);
+
+            if (!response.Flag)
+            {
+                toastService.ShowError("An error occurred while saving employee.");
+                return;
+            }
+            else
+            {
+                DialogService1.Close();
+                toastService.ShowSuccess($"Employee details saved successfully.");
+                await GetData();
+                employee = new();
+            }
+        }
+        catch (Exception ex)
+        {
+            toastService.ShowError(ex.ToString());
+            return;
+        }
+
+
+    }
+
+
+    private void EditClicked(Employee inconEmp)
+    {
+        employee = inconEmp;
+        ShowInlineDialog();
+    }
+
+    private void CreateClicked()
+    {
+        employee = new();
+        ShowInlineDialog();
+    }
+
+
+
+    public int DeleteId { get; set; }
+    private async Task DeleteClicked(Employee employee)
+    {
+        var response = await emp.DeleteAsync(employee.Id);
+        await GetData();
+        DeleteId = 0;
+        StateHasChanged();
+        toastService.ShowSuccess($"Employee deleted successfully.");
+    }
+
+
+    void OnInvalidSubmit(FormInvalidSubmitEventArgs args)
+    {
+        toastService.ShowError($"InvalidSubmit: {JsonSerializer.Serialize(args, new JsonSerializerOptions() { WriteIndented = true })}");
+    }
+
+  
+   
+    async Task ShowInlineDialog()
+    {
+        var result = await DialogService1.OpenAsync("Create Employee", ds =>
+    @<RadzenStack>
+        <RadzenTemplateForm  Name="EmployeeDialog" TItem="Employee" Data=employee Submit="Save" InvalidSubmit="OnInvalidSubmit">
+                <RadzenStack>
+                <!--Normal Input Field-->
+                    <RadzenFormField Text="Name" Variant="Variant.Outlined">
+                        <ChildContent>
+                            <RadzenTextBox Name="Name" @bind-Value=employee.Name />
+                        </ChildContent>
+                        <Helper>
+                        <RadzenRequiredValidator Component="Name" Text="Name is required." />
+                        </Helper>
+                    </RadzenFormField>
+                    <RadzenFormField Text="Email" Variant="Variant.Outlined">
+                        <ChildContent>
+                            <RadzenTextBox Name="EmailAddress"  @bind-Value=employee.EmailAddress />
+                        </ChildContent>
+                        <Helper>
+                        <RadzenRequiredValidator Component="EmailAddress" Text="Email Address is required." />
+                        <RadzenEmailValidator Component="EmailAddress" Text="Email Address is required." />
+                        </Helper>
+                    </RadzenFormField>
+
+
+                <!--Dropdown Input Field-->
+                <RadzenDropDown 
+                                Data=@departments
+                                @bind-Value=employee.DepartmentId
+                                TextProperty="DepartmentName"
+                                AllowFiltering="true"
+                                FilterAsYouType="true"
+                                FilterPlaceholder="Select Department"
+                                Placeholder="Select Department"
+                                ValueProperty="Id" 
+                                Name="DepartmentName">
+                </RadzenDropDown>
+                <RadzenRequiredValidator Style="padding-left:12px;margin:0px;padding-top:0px;" Component="DepartmentName" Text="Department is required." />
+
+                <!--File Input Field-->
+                <RadzenCard>
+                    <h6 class="mb-4">Employee Profile(.png,.jpg,.svg): </h6>
+                    <RadzenFileInput @bind-Value=@employee.ProfilePic class="w-100"
+                                      Name="ProfileFileInput"
+                                      Accept="image/*"
+                                      InputAttributes="@(new Dictionary<string,object>(){ { "aria-label", "select profile picture" }})" />
+
+                    <RadzenRequiredValidator Style="padding-left:8px;margin:0px;padding-top:0px;" Component="ProfileFileInput" Text="Employee profile is required." />
+                </RadzenCard>
+        
+                <RadzenButton ButtonType="ButtonType.Submit" Text="Submit"></RadzenButton>
+                </RadzenStack>
+            </RadzenTemplateForm>
+        </RadzenStack>);
+        }
+}
